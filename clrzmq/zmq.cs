@@ -29,7 +29,7 @@ public class ZMQ
     internal class C
     {
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr zmq_init(int app_threads, int io_threads, int flags);
+        public static extern IntPtr zmq_init(int io_threads);
 
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
         public static extern int zmq_term(IntPtr context);
@@ -84,10 +84,7 @@ public class ZMQ
 
     }
 
-    public const int POLL = 1;
-
     public const int HWM = 1;
-    public const int LWM = 2;
     public const int SWAP = 3;
     public const int AFFINITY = 4;
     public const int IDENTITY = 5;
@@ -99,8 +96,6 @@ public class ZMQ
     public const int SNDBUF = 11;
     public const int RCVBUF = 12;
 
-    //  TODO: P2P is replaced by PAIR. Remove it.
-    public const int P2P = 0;
     public const int PAIR = 0;
     public const int PUB = 1;
     public const int SUB = 2;
@@ -134,9 +129,9 @@ public class ZMQ
     {
         private IntPtr ptr;
 
-        public Context(int app_threads, int io_threads, int flags)
+        public Context(int io_threads)
         {
-            ptr = C.zmq_init(app_threads, io_threads, flags);
+            ptr = C.zmq_init(io_threads);
             if (ptr == IntPtr.Zero)
                 throw new Exception();
         }

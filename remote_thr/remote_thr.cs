@@ -22,7 +22,7 @@ class remote_thr
         int messageCount = Convert.ToInt32(args[2]);
 
         //  Initialise 0MQ infrastructure
-        ZMQ.Context ctx = new ZMQ.Context(1, 1, 0);
+        ZMQ.Context ctx = new ZMQ.Context(1);
         ZMQ.Socket s = ctx.Socket(ZMQ.PUB);
         s.Connect(address);
 
