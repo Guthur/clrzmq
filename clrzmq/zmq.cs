@@ -38,10 +38,12 @@ public class ZMQ
         public static extern int zmq_close(IntPtr socket);
 
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int zmq_setsockopt(IntPtr socket, int option, IntPtr optval, int optvallen);
+        public static extern int zmq_setsockopt(IntPtr socket, int option,
+            IntPtr optval, int optvallen);
 
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int zmq_setsockopt(IntPtr socket, int option, string optval, int optvallen);
+        public static extern int zmq_setsockopt(IntPtr socket, int option,
+            string optval, int optvallen);
 
         [DllImport("libzmq", CharSet = CharSet.Ansi,
         CallingConvention = CallingConvention.Cdecl)]
@@ -103,6 +105,10 @@ public class ZMQ
     public const int REP = 4;
     public const int XREQ = 5;
     public const int XREP = 6;
+    public const int PULL = 7;
+    public const int PUSH = 8;
+
+    //  Obsolete.
     public const int UPSTREAM = 7;
     public const int DOWNSTREAM = 8;
 
