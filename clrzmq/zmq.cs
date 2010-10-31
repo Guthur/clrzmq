@@ -1,4 +1,4 @@
-﻿/*
+/*
  
     Copyright (c) 2010 Jeffrey Dik <s450r1@gmail.com>
     Copyright (c) 2010 Martin Sustrik <sustrik@250bpm.com>
@@ -84,6 +84,8 @@ public class ZMQ
         CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr zmq_strerror(int errnum);
 
+		[DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int zmq_device(int device, IntPtr inSocket, IntPtr outSocket);
     }
 
     public const int HWM = 1;
@@ -108,11 +110,31 @@ public class ZMQ
     public const int PULL = 7;
     public const int PUSH = 8;
 
+	public const int STREAMER = 1;
+    public const int FORWARDER = 2;
+    public const int QUEUE = 3;
+	
     //  Obsolete.
     public const int UPSTREAM = 7;
     public const int DOWNSTREAM = 8;
 
     public const int NOBLOCK = 1;
+	
+	private static int Device(int device, Socket inSocket, Socket outSocket) {
+        return C.zmq_device(device, inSocket.Ptr, outSocket.Ptr);
+    }
+
+    public static int Queue(Socket inSocket, Socket outSocket) {
+        return Device(QUEUE, inSocket, outSocket);
+    }
+
+    public static int Forwarder(Socket inSocket, Socket outSocket) {
+        return Device(FORWARDER, inSocket, outSocket);
+    }
+
+    public static int Streamer(Socket inSocket, Socket outSocket) {
+        return Device(STREAMER, inSocket, outSocket);
+    }
 
     public class Exception : System.Exception
     {
@@ -222,6 +244,14 @@ public class ZMQ
                     throw new Exception();
             }
         }
+		
+		public IntPtr Ptr
+		{
+			get
+			{
+				return ptr;	
+			}
+		}
 
         public void SetSockOpt(int option, string value)
         {
