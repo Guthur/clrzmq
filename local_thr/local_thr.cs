@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using ZMQ;
 
 class local_thr
 {
@@ -22,9 +23,9 @@ class local_thr
         int messageCount = Convert.ToInt32(args[2]);
 
         //  Initialise 0MQ infrastructure
-        ZMQ.Context ctx = new ZMQ.Context(1);
-        ZMQ.Socket s = ctx.Socket(ZMQ.SUB);
-        s.SetSockOpt(ZMQ.SUBSCRIBE, "");
+        Context ctx = new Context(1);
+        Socket s = ctx.Socket(SocketType.SUB);
+        s.SetSockOpt(SocketOpt.SUBSCRIBE, "");
         s.Bind(address);
 
         //  Wait for the first message.

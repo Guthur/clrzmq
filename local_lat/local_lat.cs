@@ -1,9 +1,10 @@
-﻿
+
 using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using ZMQ;
 
 class local_lat
 {
@@ -22,8 +23,8 @@ class local_lat
         int roundtripCount = Convert.ToInt32(args[2]);
 
         //  Initialise 0MQ infrastructure
-        ZMQ.Context ctx = new ZMQ.Context(1);
-        ZMQ.Socket s = ctx.Socket(ZMQ.REP);
+        Context ctx = new Context(1);
+        Socket s = ctx.Socket(SocketType.REP);
         s.Bind(address);
 
         //  Bounce the messages.

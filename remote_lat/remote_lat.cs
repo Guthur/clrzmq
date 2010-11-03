@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using ZMQ;
 
 class remote_lat
 {
@@ -22,8 +23,8 @@ class remote_lat
         int roundtripCount = Convert.ToInt32(args[2]);
 
         //  Initialise 0MQ infrastructure
-        ZMQ.Context ctx = new ZMQ.Context(1);
-        ZMQ.Socket s = ctx.Socket(ZMQ.REQ);
+        Context ctx = new Context(1);
+        Socket s = ctx.Socket(SocketType.REQ);
         s.Connect(address);
 
         //  Create a message to send.
