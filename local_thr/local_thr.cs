@@ -30,7 +30,7 @@ class local_thr
 
         //  Wait for the first message.
         byte[] msg;
-        s.Recv(out msg);
+        msg = s.Recv();
         Debug.Assert(msg.Length == messageSize);
 
         //  Start measuring time.
@@ -41,7 +41,7 @@ class local_thr
         //  Receive all the remaining messages.
         for (int i = 1; i < messageCount; i++)
         {
-            s.Recv(out msg);
+            msg = s.Recv();
             Debug.Assert(msg.Length == messageSize);
         }
 

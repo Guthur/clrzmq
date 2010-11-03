@@ -1,4 +1,4 @@
-
+﻿
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -31,7 +31,7 @@ class local_lat
         for (int i = 0; i < roundtripCount; i++)
         {
             byte[] msg;
-            s.Recv(out msg);
+            msg = s.Recv();
             Debug.Assert(msg.Length == messageSize);
             s.Send(msg);   
         }

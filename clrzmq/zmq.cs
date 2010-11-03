@@ -26,6 +26,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ZMQ_FFI {
+
+    /// <summary>
+    /// Low Level ZeroMQ Foreign Function Interface
+    /// </summary>
     public static class C {
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr zmq_init(int io_threads);
@@ -92,6 +96,21 @@ namespace ZMQ_FFI {
 
 namespace ZMQ {
     using ZMQ_FFI;
+
+    /// <summary>
+    /// Message transport types
+    /// </summary>
+    public enum Transport {
+        INPROC = 1,
+        TCP = 2,
+        IPC = 3,
+        PGM = 4,
+        EPGM = 5
+    }
+
+    /// <summary>
+    /// Socket options
+    /// </summary>
     public enum SocketOpt {
         HWM = 1,
         SWAP = 3,
@@ -113,6 +132,9 @@ namespace ZMQ {
         BACKLOG = 19
     }
 
+    /// <summary>
+    /// Socket types
+    /// </summary>
     public enum SocketType {
         PAIR = 0,
         PUB = 1,
@@ -127,67 +149,71 @@ namespace ZMQ {
         DOWNSTREAM = 8      //***OBSOLETE: To be removed in 3.x***
     }
 
+    /// <summary>
+    /// Device types
+    /// </summary>
     public enum DeviceType {
         STREAMER = 1,
         FORWARDER = 2,
         QUEUE = 3
     }
 
+    /// <summary>
+    /// Send and receive options
+    /// </summary>
     public enum SendRecvOpt {
         NOBLOCK = 1,
         SNDMORE = 2
     }
-
-    public static class Device {
-        public static void Create(DeviceType device, Socket inSocket,
-                                  Socket outSocket) {
-            if(C.zmq_device((int)device, inSocket.Ptr, outSocket.Ptr) != 0)
-                throw new ZMQException();
-        }
-
-        public static void Queue(Socket inSocket, Socket outSocket) {
-            Create(DeviceType.QUEUE, inSocket, outSocket);
-        }
-
-        public static void Forwarder(Socket inSocket, Socket outSocket) {
-            Create(DeviceType.FORWARDER, inSocket, outSocket);
-        }
-
-        public static void Streamer(Socket inSocket, Socket outSocket) {
-            Create(DeviceType.STREAMER, inSocket, outSocket);
-        }
-    }
     
-    public class ZMQException : System.Exception {
+    /// <summary>
+    /// CLRZeroMQ Exception type
+    /// </summary>
+    public class Exception : System.Exception {
         private int errno;
 
+        /// <summary>
+        /// Get ZeroMQ Errno
+        /// </summary>
         public int Errno {
             get { return errno; }
         }
 
-        public ZMQException()
+        public Exception()
             : base(Marshal.PtrToStringAnsi(C.zmq_strerror(C.zmq_errno()))) {
             this.errno = C.zmq_errno();
         }
     }
 
+    /// <summary>
+    /// ZMQ Context
+    /// </summary>
     public class Context : IDisposable {
         private IntPtr ptr;
 
+        /// <summary>
+        /// Create ZMQ Context
+        /// </summary>
+        /// <param name="io_threads">Thread pool size</param>
         public Context(int io_threads) {
             ptr = C.zmq_init(io_threads);
             if (ptr == IntPtr.Zero)
-                throw new ZMQException();
+                throw new Exception();
         }
 
         ~Context() {
             Dispose(false);
         }
 
+        /// <summary>
+        /// Creates a new ZMQ socket
+        /// </summary>
+        /// <param name="type">Type of socket to be created</param>
+        /// <returns>A new ZMQ socket</returns>
         public Socket Socket(SocketType type) {
             IntPtr socket_ptr = C.zmq_socket(ptr, (int)type);
             if (ptr == IntPtr.Zero)
-                throw new ZMQException();
+                throw new Exception();
 
             return new Socket(socket_ptr);
         }
@@ -202,11 +228,14 @@ namespace ZMQ {
                 int rc = C.zmq_term(ptr);
                 ptr = IntPtr.Zero;
                 if (rc != 0)
-                    throw new ZMQException();
+                    throw new Exception();
             }
         }
     }
 
+    /// <summary>
+    /// ZMQ Socket
+    /// </summary>
     public class Socket : IDisposable {
         private IntPtr ptr;
         private IntPtr msg;
@@ -220,7 +249,11 @@ namespace ZMQ {
         private const int ZMQ_MAX_VSM_SIZE = 30;
         private int ZMQ_MSG_T_SIZE = IntPtr.Size + 2 + ZMQ_MAX_VSM_SIZE;
 
-        //  Don't call this, call Context.CreateSocket
+        /// <summary>
+        /// This constructor should not be called directly, use the Context 
+        /// Socket method
+        /// </summary>
+        /// <param name="ptr">Pointer to a socket</param>
         public Socket(IntPtr ptr) {
             this.ptr = ptr;
             msg = Marshal.AllocHGlobal(ZMQ_MSG_T_SIZE);
@@ -245,51 +278,75 @@ namespace ZMQ {
                 int rc = C.zmq_close(ptr);
                 ptr = IntPtr.Zero;
                 if (rc != 0)
-                    throw new ZMQException();
+                    throw new Exception();
             }
         }
 
-        public IntPtr Ptr {
-            get {
-                return ptr;
-            }
-        }
-
+        /// <summary>
+        /// Set Socket Option
+        /// </summary>
+        /// <param name="option">Socket Option</param>
+        /// <param name="value">Option value</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, string value) {
             IntPtr valPtr = Marshal.StringToHGlobalAnsi(value);
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, value.Length) != 0)
-                throw new ZMQException();
+                throw new Exception();
             Marshal.FreeHGlobal(valPtr);
         }
 
+        /// <summary>
+        /// Set Socket Option
+        /// </summary>
+        /// <param name="option">Socket Option</param>
+        /// <param name="value">Option value</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, ulong value) {
             int sizeOfValue = Marshal.SizeOf(value.GetType());
             IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
             Marshal.WriteInt64(valPtr, unchecked((long)value));
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
-                throw new ZMQException();
+                throw new Exception();
             Marshal.FreeHGlobal(valPtr);
         }
 
+        /// <summary>
+        /// Set Socket Option
+        /// </summary>
+        /// <param name="option">Socket Option</param>
+        /// <param name="value">Option value</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, byte[] value) {
             int sizeOfValue = Marshal.SizeOf(value.Length);
             IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
             Marshal.WriteInt64(valPtr, sizeOfValue);
             Marshal.Copy(value, 0, valPtr, sizeOfValue);
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
-                throw new ZMQException();
+                throw new Exception();
             Marshal.FreeHGlobal(valPtr);
         }
 
+        /// <summary>
+        /// Set Socket Option
+        /// </summary>
+        /// <param name="option">Socket Option</param>
+        /// <param name="value">Option value</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, long value) {
             int sizeOfValue = Marshal.SizeOf(value.GetType());
             IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
             Marshal.WriteInt64(valPtr, value);
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
-                throw new ZMQException();
+                throw new Exception();
             Marshal.FreeHGlobal(valPtr);
         }
 
+        /// <summary>
+        /// Get the socket option value
+        /// </summary>
+        /// <param name="option">Socket Option</param>
+        /// <returns>Option value</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public object GetSockOpt(SocketOpt option) {
             int sizeOfInt64 = Marshal.SizeOf(Type.GetType("System.Int64"));
             object output;
@@ -300,7 +357,7 @@ namespace ZMQ {
                 len = Marshal.AllocHGlobal(sizeOfInt64);
                 Marshal.WriteInt64(len, 255);
                 if (C.zmq_getsockopt(ptr, (int)option, val, len) != 0)
-                    throw new ZMQException();
+                    throw new Exception();
                 output = Marshal.PtrToStringAnsi(val,
                                                  (int)Marshal.ReadInt64(len));
             } else {
@@ -308,7 +365,7 @@ namespace ZMQ {
                 len = Marshal.AllocHGlobal(sizeOfInt64);
                 Marshal.WriteInt64(len, sizeOfInt64);
                 if (C.zmq_getsockopt(ptr, (int)option, val, len) != 0)
-                    throw new ZMQException();
+                    throw new Exception();
                 //Unchecked casting of uint64 options
                 if (option == SocketOpt.HWM || option == SocketOpt.AFFINITY ||
                     option == SocketOpt.SNDBUF || option == SocketOpt.RCVBUF) {
@@ -322,54 +379,103 @@ namespace ZMQ {
             return output;
         }
 
+        /// <summary>
+        /// Bind the socket to address
+        /// </summary>
+        /// <param name="addr">Socket Address</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Bind(string addr) {
             if (C.zmq_bind(ptr, addr) != 0)
-                throw new ZMQException();
+                throw new Exception();
+        }
+        
+        /// <summary>
+        /// Bind the socket to address
+        /// </summary>
+        /// <param name="transport">Socket transport type</param>
+        /// <param name="addr">Socket address</param>
+        /// <param name="port">Socket port</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Bind(Transport transport, string addr, uint port) {
+            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" +
+                 addr + ":" + port);
         }
 
+        /// <summary>
+        /// Bind the socket to address
+        /// </summary>
+        /// <param name="transport">Socket transport type</param>
+        /// <param name="addr">Socket address</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Bind(Transport transport, string addr) {
+            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" +
+                 addr);
+        }
+
+        /// <summary>
+        /// Connect socket to destination address
+        /// </summary>
+        /// <param name="addr">Destination Address</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Connect(string addr) {
             if (C.zmq_connect(ptr, addr) != 0)
-                throw new ZMQException();
+                throw new Exception();
         }
 
-        public bool Recv(out byte[] message) {
-            return Recv(out message, 0);
+        /// <summary>
+        /// Listen for message
+        /// </summary>
+        /// <returns>Message</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public byte[] Recv() {
+            return Recv(0);
         }
 
-        public bool Recv(out byte[] message, int flags) {
+        /// <summary>
+        /// Listen for message
+        /// </summary>
+        /// <param name="flags">Receive Option</param>
+        /// <returns>Message</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public byte[] Recv(int flags) {
+            byte[] message;
             if (C.zmq_msg_init(msg) != 0)
-                throw new ZMQException();
-            int rc = C.zmq_recv(ptr, msg, flags);
-            if (rc == 0) {
-                message = new byte[C.zmq_msg_size(msg)];
-                Marshal.Copy(C.zmq_msg_data(msg), message, 0, message.Length);
-                C.zmq_msg_close(msg);
-                return true;
-            }
-            if (C.zmq_errno() == EAGAIN) {
-                message = new byte[0];
-                return false;
-            }
-            throw new ZMQException();
+                throw new Exception();
+            if (C.zmq_recv(ptr, msg, flags) != 0)
+                throw new Exception();
+            message = new byte[C.zmq_msg_size(msg)];
+            Marshal.Copy(C.zmq_msg_data(msg), message, 0, message.Length);
+            C.zmq_msg_close(msg);
+            return message;
         }
 
-        public bool Send(byte[] message) {
-            return Send(message, 0);
+        /// <summary>
+        /// Send Message
+        /// </summary>
+        /// <param name="message">Message</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Send(byte[] message) {
+            Send(message, 0);
         }
 
-        public bool Send(byte[] message, int flags) {
+        /// <summary>
+        /// Send Message
+        /// </summary>
+        /// <param name="message">Message</param>
+        /// <param name="flags">Send Options</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Send(byte[] message, int flags) {
             if (C.zmq_msg_init_size(msg, message.Length) != 0)
-                throw new ZMQException();
+                throw new Exception();
             Marshal.Copy(message, 0, C.zmq_msg_data(msg), message.Length);
-            int rc = C.zmq_send(ptr, msg, flags);
-            //  No need for zmq_msg_close here as the message is empty anyway.
-            if (rc == 0)
-                return true;
-            if (C.zmq_errno() == EAGAIN)
-                return false;
-            throw new ZMQException();
+            if (C.zmq_send(ptr, msg, flags) != 0)
+                throw new Exception();
         }
 
+        /// <summary>
+        /// Gets or Sets socket identity 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public string Identity {
             get {
                 return (string)GetSockOpt(SocketOpt.IDENTITY);
@@ -379,6 +485,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket High Water Mark
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public ulong HWM {
             get {
                 return (ulong)GetSockOpt(SocketOpt.HWM);
@@ -388,12 +498,20 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets socket more messages indicator (multipart message)
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public bool RcvMore {
             get {
                 return (long)GetSockOpt(SocketOpt.RCVMORE) == 1;
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket swap
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public long Swap {
             get {
                 return (long)GetSockOpt(SocketOpt.SWAP);
@@ -403,6 +521,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket thread affinity 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public ulong Affinity {
             get {
                 return (ulong)GetSockOpt(SocketOpt.AFFINITY);
@@ -412,6 +534,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket transfer rate 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public long Rate {
             get {
                 return (long)GetSockOpt(SocketOpt.RATE);
@@ -421,6 +547,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket recovery interval 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public long RecoveryIvl {
             get {
                 return (long)GetSockOpt(SocketOpt.RECOVERY_IVL);
@@ -430,6 +560,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket MultiCast Loop 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public long MCastLoop {
             get {
                 return (long)GetSockOpt(SocketOpt.MCAST_LOOP);
@@ -439,6 +573,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket Send buffer size(bytes) 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public ulong SndBuf {
             get {
                 return (ulong)GetSockOpt(SocketOpt.SNDBUF);
@@ -448,6 +586,10 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Gets or Sets socket Receive buffer size(bytes) 
+        /// </summary>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public ulong RcvBuf {
             get {
                 return (ulong)GetSockOpt(SocketOpt.RCVBUF);
@@ -457,20 +599,88 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Set socket subscription filter
+        /// </summary>
+        /// <param name="filter">Filter</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Subscribe(byte[] filter) {
             SetSockOpt(SocketOpt.SUBSCRIBE, filter);
         }
 
+        /// <summary>
+        /// Set socket subscription filter
+        /// </summary>
+        /// <param name="filter">Filter</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Subscribe(string filter) {
             SetSockOpt(SocketOpt.SUBSCRIBE, filter);
         }
 
+        /// <summary>
+        /// Remove socket subscription filter
+        /// </summary>
+        /// <param name="filter">Filter</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Unsubscribe(byte[] filter) {
             SetSockOpt(SocketOpt.UNSUBSCRIBE, filter);
         }
 
+        /// <summary>
+        /// Remove socket subscription filter
+        /// </summary>
+        /// <param name="filter">Filter</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Unsubscribe(string filter) {
             SetSockOpt(SocketOpt.UNSUBSCRIBE, filter);
+        }
+
+        /// <summary>
+        /// ZMQ Device creation
+        /// </summary>
+        public static class Device {
+            /// <summary>
+            /// Create ZMQ Device
+            /// </summary>
+            /// <param name="device">Device type</param>
+            /// <param name="inSocket">Input socket</param>
+            /// <param name="outSocket">Output socket</param>
+            /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+            public static void Create(DeviceType device, Socket inSocket,
+                                      Socket outSocket) {
+                if (C.zmq_device((int)device, inSocket.ptr, outSocket.ptr) != 0)
+                    throw new Exception();
+            }
+
+            /// <summary>
+            /// Create ZMQ Queue Device
+            /// </summary>
+            /// <param name="inSocket">Input socket</param>
+            /// <param name="outSocket">Output socket</param>
+            /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+            public static void Queue(Socket inSocket, Socket outSocket) {
+                Create(DeviceType.QUEUE, inSocket, outSocket);
+            }
+
+            /// <summary>
+            /// Create ZMQ Forwarder Device
+            /// </summary>
+            /// <param name="inSocket">Input socket</param>
+            /// <param name="outSocket">Output socket</param>
+            /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+            public static void Forwarder(Socket inSocket, Socket outSocket) {
+                Create(DeviceType.FORWARDER, inSocket, outSocket);
+            }
+
+            /// <summary>
+            /// Create ZMQ Streamer Device
+            /// </summary>
+            /// <param name="inSocket">Input socket</param>
+            /// <param name="outSocket">Output socket</param>
+            /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+            public static void Streamer(Socket inSocket, Socket outSocket) {
+                Create(DeviceType.STREAMER, inSocket, outSocket);
+            }
         }
     }
 }

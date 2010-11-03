@@ -39,7 +39,7 @@ class remote_lat
         for (int i = 0; i < roundtripCount; i++)
         {
             s.Send(msg);
-            s.Recv(out msg);
+            msg = s.Recv();
             Debug.Assert(msg.Length == messageSize);
         }
 
