@@ -91,6 +91,9 @@ namespace ZMQ_FFI {
         [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
         public static extern int zmq_device(int device, IntPtr inSocket,
                                             IntPtr outSocket);
+
+        [DllImport("libzmq", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void zmq_version(IntPtr major, IntPtr minor, IntPtr patch);
     }
 }
 
@@ -182,6 +185,23 @@ namespace ZMQ {
         public Exception()
             : base(Marshal.PtrToStringAnsi(C.zmq_strerror(C.zmq_errno()))) {
             this.errno = C.zmq_errno();
+        }
+    }
+
+    public static class ZMQUtil {
+        public static string Version(out int major, out int minor, out int patch) {
+            int sizeofInt32 = Marshal.SizeOf(Type.GetType("System.Int32"));
+            IntPtr maj = Marshal.AllocHGlobal(sizeofInt32);
+            IntPtr min = Marshal.AllocHGlobal(sizeofInt32);
+            IntPtr pat = Marshal.AllocHGlobal(sizeofInt32);
+            C.zmq_version(maj, min, pat);
+            major = Marshal.ReadInt32(maj);
+            minor = Marshal.ReadInt32(min);
+            patch = Marshal.ReadInt32(pat);
+            Marshal.FreeHGlobal(maj);
+            Marshal.FreeHGlobal(min);
+            Marshal.FreeHGlobal(pat);
+            return major.ToString() + "." + minor.ToString() + "." + patch.ToString();
         }
     }
 
@@ -397,8 +417,7 @@ namespace ZMQ {
         /// <param name="port">Socket port</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Bind(Transport transport, string addr, uint port) {
-            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" +
-                 addr + ":" + port);
+            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" + addr + ":" + port);
         }
 
         /// <summary>
@@ -408,8 +427,7 @@ namespace ZMQ {
         /// <param name="addr">Socket address</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Bind(Transport transport, string addr) {
-            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" +
-                 addr);
+            Bind(Enum.GetName(typeof(Transport), transport).ToLower() + "://" + addr);
         }
 
         /// <summary>
@@ -470,6 +488,14 @@ namespace ZMQ {
             Marshal.Copy(message, 0, C.zmq_msg_data(msg), message.Length);
             if (C.zmq_send(ptr, msg, flags) != 0)
                 throw new Exception();
+        }
+
+        public void Send(string message) {
+            Send(message, 0);
+        }
+
+        public void Send(string message, int flags) {
+            Send(Encoding.ASCII.GetBytes(message), flags);
         }
 
         /// <summary>
