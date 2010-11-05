@@ -95,20 +95,38 @@ namespace ZMQ {
         SNDMORE = 2
     }
 
+    /// <summary>
+    /// IO Multiplexing polling events
+    /// </summary>
     public enum IOMultiPlex {
         POLLIN = 1,
         POLLOUT = 2,
         POLLERR = 4
     }
 
+    /// <summary>
+    /// Polling event handler
+    /// </summary>
+    /// <param name="socket">Target socket</param>
+    /// <param name="revents">Poll events</param>
     public delegate void PollHandler (Socket socket, short revents);
 
+    /// <summary>
+    /// ZMQ Poll item, sets target socket and events.
+    /// </summary>
     public struct ZMQPollItem {
         private IntPtr socket;
         private int fd;
         private short events;
         private short revents;
 
+        /// <summary>
+        /// Do not call directly, use Socket.CreatePollItem
+        /// </summary>
+        /// <param name="socket">Target ZMQ socket ptr</param>
+        /// <param name="fd">Non ZMQ socket (Not Supported)</param>
+        /// <param name="events">Desired events</param>
+        /// <param name="revents">Returned events</param>
         public ZMQPollItem(IntPtr socket, int fd, short events, short revents) {
             this.socket = socket;
             this.events = events;
@@ -116,6 +134,9 @@ namespace ZMQ {
             this.fd = fd;
         }
 
+        /// <summary>
+        /// Get returned events
+        /// </summary>
         public short Revents {
             get {
                 return revents;
@@ -123,6 +144,9 @@ namespace ZMQ {
         }
     }
 
+    /// <summary>
+    /// Polling item, provides the polling mechanism
+    /// </summary>
     public class PollItem {
         private ZMQPollItem zmqPollItem;     
         private Socket socket;
@@ -136,6 +160,9 @@ namespace ZMQ {
             this.zmqPollItem = zmqPollItem;
         }
 
+        /// <summary>
+        /// POLLIN event handler
+        /// </summary>
         public event PollHandler PollInHandler {
             add {
                 PollInHandlers += value;
@@ -145,6 +172,9 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// POLLOUT event handler
+        /// </summary>
         public event PollHandler PollOutHandler {
             add {
                 PollOutHandlers += value;
@@ -154,6 +184,9 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// POLLERR event handler
+        /// </summary>
         public event PollHandler PollErrHandler {
             add {
                 PollErrHandlers += value;
@@ -163,6 +196,9 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Fire handlers for any returned events
+        /// </summary>
         public void FireEvents () {
             if ((zmqPollItem.Revents & (int)IOMultiPlex.POLLIN) == 1) {
                 PollInHandlers(socket, zmqPollItem.Revents);
@@ -175,6 +211,9 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Get and Set ZMQ poll item
+        /// </summary>
         public ZMQPollItem ZMQPollItem {
             get {
                 return zmqPollItem;
@@ -204,8 +243,19 @@ namespace ZMQ {
         }
     }
 
+    /// <summary>
+    /// CLRZMQ utility methods
+    /// </summary>
     public static class ZMQUtil {
-        public static void Version(out int major, out int minor, out int patch) {
+
+        /// <summary>
+        /// Get ZMQ version numbers
+        /// </summary>
+        /// <param name="major">Major</param>
+        /// <param name="minor">Minor</param>
+        /// <param name="patch">Patch</param>
+        public static void Version(out int major, out int minor,
+                                   out int patch) {
             int sizeofInt32 = Marshal.SizeOf(typeof(Int32));
             IntPtr maj = Marshal.AllocHGlobal(sizeofInt32);
             IntPtr min = Marshal.AllocHGlobal(sizeofInt32);
@@ -219,6 +269,10 @@ namespace ZMQ {
             Marshal.FreeHGlobal(pat);
         }
 
+        /// <summary>
+        /// Get ZMQ version
+        /// </summary>
+        /// <returns>ZMQ version string (major.minor.patch)</returns>
         public static string Version() {
             int major, minor, patch;
             Version(out major, out minor, out patch);
@@ -274,6 +328,12 @@ namespace ZMQ {
             }
         }
 
+        /// <summary>
+        /// Polls the supplied items for events
+        /// </summary>
+        /// <param name="items">Items to Poll</param>
+        /// <param name="timeout">Timeout</param>
+        /// <returns>Number of Poll items with events</returns>
         public int Poll(ref PollItem[] items, long timeout) {
             int sizeOfZPL = Marshal.SizeOf(typeof(ZMQPollItem));
             IntPtr itemList = Marshal.AllocHGlobal(sizeOfZPL * items.Length);
@@ -347,7 +407,12 @@ namespace ZMQ {
                     throw new Exception();
             }
         }
-
+        
+        /// <summary>
+        /// Create poll item for socket listening for the supplied events
+        /// </summary>
+        /// <param name="events">Listening events</param>
+        /// <returns>Socket Poll item</returns>
         public PollItem CreatePollItem(params IOMultiPlex[] events) {
             short eventsValue = 0;
             foreach (IOMultiPlex evt in events) {
