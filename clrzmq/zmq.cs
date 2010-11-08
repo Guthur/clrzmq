@@ -23,7 +23,9 @@
 
 using System;
 using System.Text;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using SysSockets = System.Net.Sockets;
 
 namespace ZMQ {
     /// <summary>
@@ -96,12 +98,12 @@ namespace ZMQ {
     }
 
     /// <summary>
-    /// IO Multiplexing polling events
+    /// IO Multiplexing polling events bit flags
     /// </summary>
     public enum IOMultiPlex {
-        POLLIN = 1,
-        POLLOUT = 2,
-        POLLERR = 4
+        POLLIN = 0x1,
+        POLLOUT = 0x2,
+        POLLERR = 0x4
     }
 
     /// <summary>
@@ -109,36 +111,64 @@ namespace ZMQ {
     /// </summary>
     /// <param name="socket">Target socket</param>
     /// <param name="revents">Poll events</param>
-    public delegate void PollHandler (Socket socket, short revents);
+    public delegate void PollHandler(Socket socket, IOMultiPlex revents);
 
     /// <summary>
     /// ZMQ Poll item, sets target socket and events.
     /// </summary>
     public struct ZMQPollItem {
         private IntPtr socket;
+#if x86 || POSIX
         private int fd;
+#else
+        private long fd;
+#endif
         private short events;
         private short revents;
 
+#if x86 || POSIX
         /// <summary>
-        /// Do not call directly, use Socket.CreatePollItem
+        /// Do not call directly
+        /// </summary>
+        /// <param name="socket">Target ZMQ socket ptr</param>
+        /// <param name="fd">Non ZMQ socket (Experimental)</param>
+        /// <param name="events">Desired events</param>
+        /// <param name="revents">Returned events</param>
+        internal ZMQPollItem(IntPtr socket, object fd, short events) {
+            this.socket = socket;
+            this.events = events;
+            this.revents = 0;
+            this.fd = Convert.ToInt32(fd);
+        }
+#else
+        /// <summary>
+        /// Do not call directly
         /// </summary>
         /// <param name="socket">Target ZMQ socket ptr</param>
         /// <param name="fd">Non ZMQ socket (Not Supported)</param>
         /// <param name="events">Desired events</param>
         /// <param name="revents">Returned events</param>
-        public ZMQPollItem(IntPtr socket, int fd, short events, short revents) {
+        internal ZMQPollItem(IntPtr socket, object fd, short events) {
             this.socket = socket;
             this.events = events;
-            this.revents = events;
-            this.fd = fd;
+            this.revents = 0;
+            this.fd = unchecked((long)Convert.ToInt64(fd));
+        }
+#endif
+
+        /// <summary>
+        /// Reset revents so that poll item can be safely reused
+        /// </summary>
+        public void ResetRevents() {
+            revents = 0;
         }
 
         /// <summary>
         /// Get returned events
         /// </summary>
-        public short Revents {
+        public IOMultiPlex Revents {
             get {
+                IOMultiPlex revents = (IOMultiPlex)this.revents;
                 return revents;
             }
         }
@@ -148,14 +178,19 @@ namespace ZMQ {
     /// Polling item, provides the polling mechanism
     /// </summary>
     public class PollItem {
-        private ZMQPollItem zmqPollItem;     
+        private ZMQPollItem zmqPollItem;
         private Socket socket;
 
         private event PollHandler PollInHandlers;
         private event PollHandler PollOutHandlers;
         private event PollHandler PollErrHandlers;
 
-        public PollItem(ZMQPollItem zmqPollItem, Socket socket){
+        /// <summary>
+        /// Should not be created directly, use Socket.CreatePollItem
+        /// </summary>
+        /// <param name="zmqPollItem"></param>
+        /// <param name="socket"></param>
+        internal PollItem(ZMQPollItem zmqPollItem, Socket socket) {
             this.socket = socket;
             this.zmqPollItem = zmqPollItem;
         }
@@ -199,16 +234,20 @@ namespace ZMQ {
         /// <summary>
         /// Fire handlers for any returned events
         /// </summary>
-        public void FireEvents () {
-            if ((zmqPollItem.Revents & (int)IOMultiPlex.POLLIN) == 1) {
+        public void FireEvents() {
+            if ((zmqPollItem.Revents & IOMultiPlex.POLLIN) ==
+                IOMultiPlex.POLLIN) {
                 PollInHandlers(socket, zmqPollItem.Revents);
             }
-            if ((zmqPollItem.Revents & (int)IOMultiPlex.POLLOUT) == 1) {
+            if ((zmqPollItem.Revents & IOMultiPlex.POLLOUT) ==
+                IOMultiPlex.POLLOUT) {
                 PollOutHandlers(socket, zmqPollItem.Revents);
             }
-            if ((zmqPollItem.Revents & (int)IOMultiPlex.POLLERR) == 1) {
+            if ((zmqPollItem.Revents & IOMultiPlex.POLLERR) ==
+                IOMultiPlex.POLLERR) {
                 PollErrHandlers(socket, zmqPollItem.Revents);
             }
+            zmqPollItem.ResetRevents();
         }
 
         /// <summary>
@@ -223,7 +262,7 @@ namespace ZMQ {
             }
         }
     }
-    
+
     /// <summary>
     /// CLRZeroMQ Exception type
     /// </summary>
@@ -246,7 +285,34 @@ namespace ZMQ {
     /// <summary>
     /// CLRZMQ utility methods
     /// </summary>
-    public static class ZMQUtil {
+    public static class ZHelpers {
+        private static Random rand;
+
+        private static Random GetRandomGen() {
+            if (rand == null)
+                rand = new Random(DateTime.Now.Millisecond);
+            return rand;
+        }
+
+        /// <summary>
+        /// Prints all pending messages to the console.
+        /// </summary>
+        /// <param name="socket">ZMQ Socket</param>
+        public static void Dump(Socket socket, Encoding encoding) {
+            foreach (byte[] msg in socket.RecvAll()) {
+                Console.WriteLine(encoding.GetString(msg));
+            }
+        }
+
+        /// <summary>
+        /// Sets socket Identity to a random number.
+        /// </summary>
+        /// <param name="socket">ZMQ Socket</param>
+        public static void SetID(Socket socket, Encoding encoding) {
+            Random rand = GetRandomGen();
+            socket.StringToIdentity(rand.Next().ToString() + "-" +
+                rand.Next().ToString(), encoding);
+        }
 
         /// <summary>
         /// Get ZMQ version numbers
@@ -334,13 +400,17 @@ namespace ZMQ {
         /// <param name="items">Items to Poll</param>
         /// <param name="timeout">Timeout</param>
         /// <returns>Number of Poll items with events</returns>
-        public int Poll(ref PollItem[] items, long timeout) {
+        public int Poll(PollItem[] items, long timeout) {
             int sizeOfZPL = Marshal.SizeOf(typeof(ZMQPollItem));
             IntPtr itemList = Marshal.AllocHGlobal(sizeOfZPL * items.Length);
             IntPtr offset = itemList;
             foreach (PollItem item in items) {
                 Marshal.StructureToPtr(item.ZMQPollItem, offset, false);
+#if x64
                 offset = new IntPtr(offset.ToInt64() + sizeOfZPL);
+#elif x86
+                offset = new IntPtr(offset.ToInt32() + sizeOfZPL);
+#endif
             }
             int rc = C.zmq_poll(itemList, items.Length, timeout);
             if (rc < 0)
@@ -349,13 +419,26 @@ namespace ZMQ {
                 for (int index = 0; index < items.Length; index++) {
                     items[index].ZMQPollItem = (ZMQPollItem)
                         Marshal.PtrToStructure(itemList, typeof(ZMQPollItem));
+#if x64
                     itemList = new IntPtr(itemList.ToInt64() + sizeOfZPL);
+#elif x86
+                    itemList = new IntPtr(itemList.ToInt32() + sizeOfZPL);
+#endif
                 }
                 foreach (PollItem item in items) {
                     item.FireEvents();
                 }
-            }   
+            }
             return rc;
+        }
+
+        /// <summary>
+        /// Polls the supplied items for events, with immediate timeout
+        /// </summary>
+        /// <param name="items">Items to Poll</param>
+        /// <returns>Number of Poll items with events</returns>
+        public int Poll(PollItem[] items) {
+            return Poll(items, -1);
         }
     }
 
@@ -365,6 +448,7 @@ namespace ZMQ {
     public class Socket : IDisposable {
         private IntPtr ptr;
         private IntPtr msg;
+        private string address;
 
         //  TODO:  This won't hold on different platforms.
         //  Isn't there a way to access POSIX error codes in CLR?
@@ -380,7 +464,7 @@ namespace ZMQ {
         /// Socket method
         /// </summary>
         /// <param name="ptr">Pointer to a socket</param>
-        public Socket(IntPtr ptr) {
+        internal Socket(IntPtr ptr) {
             this.ptr = ptr;
             msg = Marshal.AllocHGlobal(ZMQ_MSG_T_SIZE);
         }
@@ -407,32 +491,50 @@ namespace ZMQ {
                     throw new Exception();
             }
         }
-        
+
+#if x86
+        private object ReadSizeT(IntPtr ptr) {
+            return unchecked((uint)Marshal.ReadInt32(ptr));
+        }
+
+        private void WriteSizeT(IntPtr ptr, object val) {
+            Marshal.WriteInt32(ptr, unchecked(Convert.ToInt32(val)));
+        }
+#elif x64
+        private object ReadSizeT(IntPtr ptr) {
+            return unchecked((ulong)Marshal.ReadInt64(ptr));
+        }
+
+        private void WriteSizeT(IntPtr ptr, object val) {        
+            Marshal.WriteInt64(ptr, unchecked(Convert.ToInt64(val)));
+        }
+#endif
         /// <summary>
-        /// Create poll item for socket listening for the supplied events
+        /// Create poll item for ZMQ socket listening, for the supplied events
         /// </summary>
         /// <param name="events">Listening events</param>
         /// <returns>Socket Poll item</returns>
-        public PollItem CreatePollItem(params IOMultiPlex[] events) {
-            short eventsValue = 0;
-            foreach (IOMultiPlex evt in events) {
-                eventsValue += (short)evt;
-            }
-            return new PollItem(new ZMQPollItem(ptr, 0, eventsValue, 0), this);
+        public PollItem CreatePollItem(IOMultiPlex events) {
+            return new PollItem(new ZMQPollItem(ptr, 0, (short)events), this);
         }
 
         /// <summary>
-        /// Set Socket Option
+        /// Create poll item for ZMQ and plain socket listening, for the supplied events
         /// </summary>
-        /// <param name="option">Socket Option</param>
-        /// <param name="value">Option value</param>
-        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
-        public void SetSockOpt(SocketOpt option, string value) {
-            IntPtr valPtr = Marshal.StringToHGlobalAnsi(value);
-            if (C.zmq_setsockopt(ptr, (int)option, valPtr, value.Length) != 0)
-                throw new Exception();
-            Marshal.FreeHGlobal(valPtr);
+        /// <param name="events">Listening events</param>
+        /// <param name="sysSocket">Plain Socket</param>
+        /// <returns>Socket Poll item</returns>
+        public PollItem CreatePollItem(IOMultiPlex events,
+                                       SysSockets.Socket sysSocket) {
+#if x86 || POSIX
+            return new PollItem(new ZMQPollItem(ptr, sysSocket.Handle.ToInt32(),
+                                                (short)events), this);
+#elif x64
+            return new PollItem(new ZMQPollItem(ptr, sysSocket.Handle.ToInt64(),
+                                                (short)events), this);
+#endif
         }
+
 
         /// <summary>
         /// Set Socket Option
@@ -441,9 +543,9 @@ namespace ZMQ {
         /// <param name="value">Option value</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, ulong value) {
-            int sizeOfValue = Marshal.SizeOf(value.GetType());
+            int sizeOfValue = Marshal.SizeOf(typeof(ulong));
             IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
-            Marshal.WriteInt64(valPtr, unchecked((long)value));
+            WriteSizeT(valPtr, value);
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
                 throw new Exception();
             Marshal.FreeHGlobal(valPtr);
@@ -456,11 +558,9 @@ namespace ZMQ {
         /// <param name="value">Option value</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, byte[] value) {
-            int sizeOfValue = Marshal.SizeOf(value.Length);
-            IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
-            Marshal.WriteInt64(valPtr, sizeOfValue);
-            Marshal.Copy(value, 0, valPtr, sizeOfValue);
-            if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
+            IntPtr valPtr = Marshal.AllocHGlobal(value.Length);
+            Marshal.Copy(value, 0, valPtr, value.Length);
+            if (C.zmq_setsockopt(ptr, (int)option, valPtr, value.Length) != 0)
                 throw new Exception();
             Marshal.FreeHGlobal(valPtr);
         }
@@ -472,9 +572,9 @@ namespace ZMQ {
         /// <param name="value">Option value</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void SetSockOpt(SocketOpt option, long value) {
-            int sizeOfValue = Marshal.SizeOf(value.GetType());
+            int sizeOfValue = Marshal.SizeOf(typeof(long));
             IntPtr valPtr = Marshal.AllocHGlobal(sizeOfValue);
-            Marshal.WriteInt64(valPtr, value);
+            WriteSizeT(valPtr, value);
             if (C.zmq_setsockopt(ptr, (int)option, valPtr, sizeOfValue) != 0)
                 throw new Exception();
             Marshal.FreeHGlobal(valPtr);
@@ -487,22 +587,20 @@ namespace ZMQ {
         /// <returns>Option value</returns>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public object GetSockOpt(SocketOpt option) {
-            int sizeOfInt64 = Marshal.SizeOf(typeof(Int64));
             object output;
             IntPtr val;
-            IntPtr len;
-            if (option == SocketOpt.IDENTITY) {                
+            IntPtr len = Marshal.AllocHGlobal(IntPtr.Size);
+            if (option == SocketOpt.IDENTITY) {
                 val = Marshal.AllocHGlobal(255);
-                len = Marshal.AllocHGlobal(sizeOfInt64);
-                Marshal.WriteInt64(len, 255);
+                WriteSizeT(len, 255); 
                 if (C.zmq_getsockopt(ptr, (int)option, val, len) != 0)
                     throw new Exception();
-                output = Marshal.PtrToStringAnsi(val,
-                                                 (int)Marshal.ReadInt64(len));
+                byte[] buffer = new byte[Convert.ToInt32(ReadSizeT(len))];
+                Marshal.Copy(val, buffer, 0, buffer.Length);
+                output = buffer;
             } else {
-                val = Marshal.AllocHGlobal(sizeOfInt64);
-                len = Marshal.AllocHGlobal(sizeOfInt64);
-                Marshal.WriteInt64(len, sizeOfInt64);
+                val = Marshal.AllocHGlobal(IntPtr.Size);
+                WriteSizeT(len, Marshal.SizeOf(typeof(long)));
                 if (C.zmq_getsockopt(ptr, (int)option, val, len) != 0)
                     throw new Exception();
                 //Unchecked casting of uint64 options
@@ -524,10 +622,11 @@ namespace ZMQ {
         /// <param name="addr">Socket Address</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Bind(string addr) {
+            address = addr;
             if (C.zmq_bind(ptr, addr) != 0)
                 throw new Exception();
         }
-        
+
         /// <summary>
         /// Bind the socket to address
         /// </summary>
@@ -557,6 +656,7 @@ namespace ZMQ {
         /// <param name="addr">Destination Address</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Connect(string addr) {
+            address = addr;
             if (C.zmq_connect(ptr, addr) != 0)
                 throw new Exception();
         }
@@ -568,6 +668,18 @@ namespace ZMQ {
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public byte[] Recv() {
             return Recv(0);
+        }
+
+        public string Recv(Encoding encoding) {
+            return Recv(0, encoding);
+        }
+
+        public string Recv(SendRecvOpt flags, Encoding encoding) {
+            return Recv((int)flags, encoding);
+        }
+
+        private string Recv(int flags, Encoding encoding) {
+            return encoding.GetString(Recv(0));
         }
 
         /// <summary>
@@ -596,6 +708,7 @@ namespace ZMQ {
         /// </summary>
         /// <param name="flags">Receive Options</param>
         /// <returns>Message</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public byte[] Recv(params SendRecvOpt[] flags) {
             int options = 0;
             foreach (SendRecvOpt option in flags) {
@@ -605,7 +718,55 @@ namespace ZMQ {
         }
 
         /// <summary>
-        /// Send Message
+        /// Listen for message, Non Blocking
+        /// </summary>
+        /// <returns>Message</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public byte[] RecvNoBlock() {
+            return Recv((int)SendRecvOpt.NOBLOCK);
+        }
+
+        /// <summary>
+        /// Listen for message, Non Blocking
+        /// </summary>
+        /// <param name="encoding">String Encoding</param>
+        /// <returns>Message</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public string RecvNoBlock(Encoding encoding) {
+            return Recv((int)SendRecvOpt.NOBLOCK, encoding);
+        }
+
+        /// <summary>
+        /// Listen for message, retrieving all pending message parts
+        /// </summary>
+        /// <returns>List of message parts</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public List<byte[]> RecvAll() {
+            List<byte[]> messages = new List<byte[]>();
+            messages.Add(Recv());
+            while (RcvMore) {
+                messages.Add(Recv());
+            }
+            return messages;
+        }
+
+        /// <summary>
+        /// Listen for message, retrieving all pending message parts
+        /// </summary>
+        /// <param name="encoding">String Encoding</param>
+        /// <returns>List of message parts</returns>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public List<string> RecvAll(Encoding encoding) {
+            List<string> messages = new List<string>();
+            messages.Add(Recv(encoding));
+            while (RcvMore) {
+                messages.Add(Recv(encoding));
+            }
+            return messages;
+        }
+
+        /// <summary>
+        /// Send Message.
         /// </summary>
         /// <param name="message">Message</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
@@ -614,16 +775,26 @@ namespace ZMQ {
         }
 
         /// <summary>
-        /// Send Message
+        /// Send Message.
         /// </summary>
         /// <param name="message">Message data</param>
         /// <param name="flags">Send Options</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
         public void Send(byte[] message, params SendRecvOpt[] flags) {
             int options = 0;
             foreach (SendRecvOpt option in flags) {
                 options += (int)option;
             }
             Send(message, options);
+        }
+
+        /// <summary>
+        /// Send multi-part message, holding for further message parts. 
+        /// </summary>
+        /// <param name="message"></param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void SendMore(byte[] message) {
+            Send(message, (int)SendRecvOpt.SNDMORE);
         }
 
         /// <summary>
@@ -640,21 +811,49 @@ namespace ZMQ {
                 throw new Exception();
         }
 
-        public void Send(string message) {
-            Send(message, 0);
+        /// <summary>
+        /// Send Message.
+        /// </summary>
+        /// <param name="message">Message</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Send(string message, Encoding encoding) {
+            Send(message, 0, encoding);
         }
 
-        public void Send(string message, int flags) {
-            Send(Encoding.ASCII.GetBytes(message), flags);
+        /// <summary>
+        /// Send multi-part message, holding for further message parts. 
+        /// </summary>
+        /// <param name="message"></param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void SendMore(string message, Encoding encoding) {
+            Send(message, (int)SendRecvOpt.SNDMORE, encoding);
+        }
+
+        /// <summary>
+        /// Send Message.
+        /// </summary>
+        /// <param name="message">Message data</param>
+        /// <param name="flags">Send Options</param>
+        /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
+        public void Send(string message, int flags, Encoding encoding) {
+            Send(encoding.GetBytes(message), flags);
+        }
+
+        public string IdentityToString(Encoding encoding) {
+            return encoding.GetString(Identity);
+        }
+
+        public void StringToIdentity(string identity, Encoding encoding) {
+            Identity = encoding.GetBytes(identity);
         }
 
         /// <summary>
         /// Gets or Sets socket identity 
         /// </summary>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
-        public string Identity {
+        public byte[] Identity {
             get {
-                return (string)GetSockOpt(SocketOpt.IDENTITY);
+                return (byte[])GetSockOpt(SocketOpt.IDENTITY);
             }
             set {
                 SetSockOpt(SocketOpt.IDENTITY, value);
@@ -776,6 +975,15 @@ namespace ZMQ {
         }
 
         /// <summary>
+        /// Get connection address
+        /// </summary>
+        public string Address {
+            get {
+                return address;
+            }
+        }
+
+        /// <summary>
         /// Set socket subscription filter
         /// </summary>
         /// <param name="filter">Filter</param>
@@ -789,8 +997,8 @@ namespace ZMQ {
         /// </summary>
         /// <param name="filter">Filter</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
-        public void Subscribe(string filter) {
-            SetSockOpt(SocketOpt.SUBSCRIBE, filter);
+        public void Subscribe(string filter, Encoding encoding) {
+            SetSockOpt(SocketOpt.SUBSCRIBE, encoding.GetBytes(filter));
         }
 
         /// <summary>
@@ -807,8 +1015,8 @@ namespace ZMQ {
         /// </summary>
         /// <param name="filter">Filter</param>
         /// <exception cref="ZMQ.Exception">ZMQ Exception</exception>
-        public void Unsubscribe(string filter) {
-            SetSockOpt(SocketOpt.UNSUBSCRIBE, filter);
+        public void Unsubscribe(string filter, Encoding encoding) {
+            SetSockOpt(SocketOpt.UNSUBSCRIBE, encoding.GetBytes(filter));
         }
 
         /// <summary>

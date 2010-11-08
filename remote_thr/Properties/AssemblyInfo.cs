@@ -6,7 +6,13 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("remote_thr")]
-[assembly: AssemblyDescription("0MQ CLR library throughput test (remote)")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("Microsoft")]
+[assembly: AssemblyProduct("remote_thr")]
+[assembly: AssemblyCopyright("Copyright © Microsoft 2010")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -14,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("b09178a9-1671-4bf3-97ea-6fd2ab634624")]
+[assembly: Guid("c48922dd-8f72-4c7f-a3c1-dbdb010c3f05")]
 
 // Version information for an assembly consists of the following four values:
 //

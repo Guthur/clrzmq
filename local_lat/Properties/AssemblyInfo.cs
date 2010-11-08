@@ -6,7 +6,13 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("local_lat")]
-[assembly: AssemblyDescription("0MQ CLR library latency test (local)")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("Microsoft")]
+[assembly: AssemblyProduct("local_lat")]
+[assembly: AssemblyCopyright("Copyright © Microsoft 2010")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -14,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("b97708ac-ad44-4555-9ce9-4d5eac3886bc")]
+[assembly: Guid("c578f35b-3d8a-4aab-be71-cae8a796df1e")]
 
 // Version information for an assembly consists of the following four values:
 //

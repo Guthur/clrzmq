@@ -6,7 +6,13 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("clrzmq")]
-[assembly: AssemblyDescription("0MQ CLR library")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("Microsoft")]
+[assembly: AssemblyProduct("clrzmq")]
+[assembly: AssemblyCopyright("Copyright © Microsoft 2010")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -14,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("5fc94c97-44bc-4a51-af9b-e6cb427eff8d")]
+[assembly: Guid("361edfa3-7f66-4bbf-8b26-6d34391a9bb6")]
 
 // Version information for an assembly consists of the following four values:
 //
